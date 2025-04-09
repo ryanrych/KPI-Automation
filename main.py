@@ -95,7 +95,48 @@ def get_external_dppm(start_date, end_date):
 
     return external_dppm
 
-external = get_external_dppm("2025-02-01", "2025-02-28")
+
+def get_scrap_values(start_date, end_date):
+    """
+    retrieves value of scrap from all job cards through the given date range
+
+    :param start_date: start date in YYYY-MM-DD format
+    :param end_date: end date in YYYY-MM-DD format
+    :return: a dictionary pairing all divisions to the value of scrap from each during the given range
+    """
+
+    scrap_values = {}
+    for division in DIVISIONS:
+        scrap_values[division] = 0.0
+        for code in DIVISIONS[division]:
+            query = (f"SELECT JC_ORDER_N, JC_SCRAP "
+                     f"FROM jcardman "
+                     f"WHERE JC_MACH_CO LIKE \"{code}%\" "
+                     f"AND JC_RUN_DAT >= %s "
+                     f"AND JC_RUN_DAT <= %s ")
+            cursor.execute(query, (start_date, end_date))
+            response = cursor.fetchall()
+            for row in response:
+
+                query = "SELECT OR_CPU, OR_UNIT_TY, OR_ORD_STA, OR_PART_NU FROM `order` WHERE OR_ORDER_N = %s;"
+                cursor.execute(query, (row[0],))
+                order_row = cursor.fetchone()
+
+                try:
+                    unit = int(order_row[1])
+                except ValueError:
+                    unit = 1
+
+                scrap = float((row[1] or 0))
+                cpu = float((order_row[0] or 0))
+                cpp = float(cpu / unit)
+
+                scrap_values[division] += scrap * cpp
+
+    return scrap_values
+
+
+external = get_scrap_values("2025-02-01", "2025-02-28")
 print(json.dumps(external, indent=2))
 
 cursor.close()
